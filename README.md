@@ -56,16 +56,253 @@ OpsPilot targets data-platform engineers, SRE teams, and incident commanders who
 
 ## Architecture
 
-OpsPilot uses six explicit tiers:
+The governing design principle is:
 
-1. **Experience:** incident workspace, plan, evidence, diagnosis, approval, verification, and documentation UI.
-2. **Application/API:** strict Next.js server routes and Zod request boundaries.
-3. **Agentic reasoning:** GPT-5.6 planning, evidence assessment, adaptive tool selection, and cited synthesis.
-4. **Tool/evidence plane:** typed read-only Databricks, AWS, GitHub, runbook, and history adapters.
-5. **Governance/action:** deterministic proposal construction, SHA-256 approval binding, idempotent sandbox execution, and recovery verification.
-6. **State/security:** SQLite persistence, audit events, redaction, sanitization, security headers, and server-only secrets.
+> **GPT-5.6 owns investigation reasoning; deterministic application controls own authority, execution, verification, and closure.**
 
-The complete component model, trust boundaries, interaction sequence, deployment topology, and live-versus-simulated map are documented in [Architecture](outputs/opspilot-architecture.md).
+This separation allows the model to investigate adaptively without allowing probabilistic output, untrusted logs, repository content, or conversational input to authorize an infrastructure change.
+
+### Tiered component architecture
+
+```mermaid
+flowchart TB
+    User["Data Engineer / SRE / Incident Commander"]
+
+    subgraph T1["Tier 1 — Experience and Interaction"]
+        UI["Next.js Incident Workspace"]
+        Timeline["Plan, Evidence, Timeline, Diagnosis"]
+        ApprovalUI["Exact Action Review and Approval"]
+        DocsUI["Grounded Resolution Drafts"]
+    end
+
+    subgraph T2["Tier 2 — Application and API Boundary"]
+        InvestigationAPI["Investigation API"]
+        DecisionAPI["Action Decision API"]
+        DocumentationAPI["Documentation API"]
+        PublicationAPI["Publication Decision API"]
+        Validation["Zod Validation and Request Limits"]
+    end
+
+    subgraph T3["Tier 3 — Agentic Reasoning"]
+        Orchestrator["Adaptive Investigation Orchestrator"]
+        Provider["Reasoning Provider Interface"]
+        GPT["Live GPT-5.6 Provider"]
+        TestProvider["Deterministic Test Provider"]
+        CitationGate["Citation and Sufficiency Gate"]
+    end
+
+    subgraph T4["Tier 4 — Tool and Evidence Plane"]
+        Registry["Typed Read-Only Tool Registry"]
+        DBX["Databricks Diagnostics"]
+        AWS["AWS S3 / IAM Diagnostics"]
+        GitHub["GitHub Change Evidence"]
+        Knowledge["Runbook / Incident History"]
+        Evidence["Normalized Evidence Records"]
+    end
+
+    subgraph T5["Tier 5 — Governance, Action, and Verification"]
+        Proposal["Deterministic Remediation Builder"]
+        Hash["Canonical Payload + SHA-256 Hash"]
+        Policy["Approval / Expiry / Integrity / Idempotency"]
+        Executor["Allowlisted Sandbox Executor"]
+        Verify["S3 + Databricks Recovery Verification"]
+        Generator["Grounded Documentation Generator"]
+        PublishGate["Separate Publication Approval"]
+    end
+
+    subgraph T6["Tier 6 — State, Audit, and Security"]
+        SQLite["SQLite Operational Store"]
+        Audit["Append-Only Audit Events"]
+        Security["Redaction / Sanitization / CSP"]
+        Secrets["Server-Only Secrets"]
+    end
+
+    subgraph External["External or Simulated Systems"]
+        OpenAI["OpenAI Responses API"]
+        DatabricksSystem["Databricks"]
+        AWSSystem["AWS"]
+        GitHubSystem["GitHub"]
+        ServiceSystems["ServiceNow / Jira"]
+    end
+
+    User --> UI
+    UI --> Timeline
+    UI --> ApprovalUI
+    UI --> DocsUI
+    UI --> InvestigationAPI
+    ApprovalUI --> DecisionAPI
+    DocsUI --> DocumentationAPI
+    DocsUI --> PublicationAPI
+
+    InvestigationAPI --> Validation --> Orchestrator
+    Orchestrator --> Provider
+    Provider --> GPT --> OpenAI
+    Provider --> TestProvider
+    Orchestrator --> Registry
+    Orchestrator --> CitationGate
+
+    Registry --> DBX --> DatabricksSystem
+    Registry --> AWS --> AWSSystem
+    Registry --> GitHub --> GitHubSystem
+    Registry --> Knowledge
+    DBX --> Evidence
+    AWS --> Evidence
+    GitHub --> Evidence
+    Knowledge --> Evidence
+    Evidence --> Orchestrator
+
+    CitationGate --> Proposal --> Hash --> SQLite
+    DecisionAPI --> Policy --> Executor
+    Hash --> Policy
+    Executor --> Verify --> SQLite
+    Verify --> Generator
+    DocumentationAPI --> Generator
+    Generator --> Security --> SQLite
+    PublicationAPI --> PublishGate --> ServiceSystems
+
+    Orchestrator --> Audit
+    Policy --> Audit
+    Verify --> Audit
+    Secrets --> GPT
+```
+
+### Tier responsibilities
+
+| Tier | Components | Responsibility and interaction |
+|---|---|---|
+| **1. Experience** | Incident workspace, investigation timeline, evidence explorer, diagnosis, approval panel, documentation workspace | Gives the operator one visible journey from incident intake to verified recovery. It sends requests to server APIs but cannot call tools or approve actions implicitly. |
+| **2. Application/API** | Next.js route handlers, Zod schemas, request limits | Forms the trusted server boundary. It validates every request and delegates investigation, decisions, and documentation to the appropriate service. |
+| **3. Agentic reasoning** | Adaptive orchestrator, GPT-5.6 provider, deterministic provider, citation gate | GPT-5.6 plans the investigation, selects allowlisted read tools, evaluates sufficiency, gathers more evidence when needed, and synthesizes cited hypotheses. The orchestrator validates every tool request and citation. |
+| **4. Tool/evidence plane** | Typed registry, Databricks, AWS, GitHub, runbook, and incident-history adapters | Executes bounded read-only diagnostics and converts heterogeneous results into normalized evidence records. Tool output is treated as untrusted evidence, never as authority. |
+| **5. Governance/action** | Remediation builder, canonical hash, approval policy, executor, verification, document generator | Deterministic code builds the exact action. A human decision must match its hash and expiry. Execution is idempotent, and closure requires successful S3 and Databricks verification. Publication has a separate approval. |
+| **6. State/security** | SQLite, audit events, redaction, sanitization, CSP, environment secrets | Persists the investigation and authorization record, protects credentials, records transitions, and prevents sensitive or unsafe content from reaching the UI or generated documents. |
+
+### Agentic investigation and closed-loop action
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant UI as Incident Workspace
+    participant Orch as Adaptive Orchestrator
+    participant GPT as GPT-5.6
+    participant Tools as Read-Only Tools
+    participant Gov as Governance
+    participant Exec as Sandbox Executor
+    participant Store as SQLite / Audit
+
+    Operator->>UI: Start investigation
+    UI->>Orch: Validated incident request
+    Orch->>GPT: Plan using bounded tools and resources
+    GPT-->>Orch: Structured initial plan
+    Orch->>Tools: Gather Databricks, S3, IAM, and runbook evidence
+    Tools-->>Orch: Normalized evidence records
+    Orch->>GPT: Assess evidence sufficiency
+    GPT-->>Orch: gather_more — request IAM history and GitHub changes
+    Orch->>Tools: Execute allowlisted follow-up calls
+    Tools-->>Orch: Causal change evidence
+    Orch->>GPT: Synthesize ranked, cited hypotheses
+    GPT-->>Orch: Diagnosis and evidence IDs
+    Orch->>Gov: Validated synthesis
+    Gov->>Store: Persist exact proposal and SHA-256 hash
+    Gov-->>UI: Show action, risk, rollback, expiry, and hash
+    Operator->>UI: Approve exact action
+    UI->>Gov: Decision + stored action hash
+    Gov->>Gov: Recompute integrity; check expiry and idempotency
+    Gov->>Exec: Execute once
+    Exec->>Exec: Restore simulated access
+    Exec->>Exec: Verify S3 and retry Databricks job
+    Exec->>Store: Persist verified outcome and audit event
+    Store-->>UI: Recovery verified; enable grounded drafts
+```
+
+The live validated reasoning path is:
+
+```text
+initial plan → collect initial evidence → detect causal gap
+→ gather_more → select IAM history and GitHub change tools
+→ synthesize cited hypotheses → deterministic proposal
+→ human approval → execute → verify → document
+```
+
+### Trust boundaries and authority
+
+```mermaid
+flowchart LR
+    subgraph Untrusted["Untrusted / Probabilistic"]
+        Inputs["Incident text and conversation"]
+        Results["Logs, policies, PRs, runbooks"]
+        Model["GPT-5.6 output"]
+    end
+
+    subgraph Validated["Validated Evidence"]
+        Schemas["Strict schemas"]
+        Allowlist["Tool and resource allowlists"]
+        Citations["Normalized evidence and citation checks"]
+    end
+
+    subgraph Authority["Deterministic Authority"]
+        State["State machine"]
+        ExactAction["Exact action builder"]
+        Approval["Human approval + hash + expiry"]
+        Recovery["Post-action verification"]
+    end
+
+    subgraph Effects["Controlled Effects"]
+        Change["Sandbox state change"]
+        Resolved["Verified resolution"]
+        Drafts["Grounded drafts"]
+    end
+
+    Inputs --> Schemas
+    Results --> Citations
+    Model --> Schemas
+    Schemas --> Allowlist --> Citations --> State
+    State --> ExactAction --> Approval --> Change
+    Change --> Recovery --> Resolved --> Drafts
+
+    Model -. cannot approve .-> Approval
+    Results -. cannot authorize .-> Approval
+    Inputs -. cannot execute .-> Change
+```
+
+Only the solid path can produce an effect. The dashed paths document explicitly denied authority relationships.
+
+### Deployment topology
+
+```mermaid
+flowchart LR
+    Browser["Judge / Operator Browser"]
+
+    subgraph App["Next.js Application"]
+        Web["React UI + Server Routes"]
+        Runtime["Orchestrator + Providers + Tools + Governance"]
+        DB["SQLite Persistent Store"]
+    end
+
+    Env["Server Environment Variables"]
+    OpenAIAPI["OpenAI Responses API"]
+    Fixtures["Bundled Enterprise Fixtures"]
+
+    Browser <-->|HTTPS| Web
+    Web --> Runtime
+    Runtime <--> DB
+    Env --> Runtime
+    Runtime -->|Live GPT-5.6 reasoning| OpenAIAPI
+    Runtime -->|Reproducible diagnostics and actions| Fixtures
+```
+
+### Live versus simulated components
+
+| Capability | Current implementation |
+|---|---|
+| GPT-5.6 planning, assessment, adaptation, and synthesis | **Live OpenAI Responses API**, validated end to end |
+| Credential-free judging and automated tests | Deterministic provider implementing the same reasoning interface |
+| Databricks, AWS, and GitHub diagnostics | Realistic typed fixture adapters; no production credentials required |
+| IAM remediation and Databricks retry | Deterministic sandbox action with post-action verification |
+| ServiceNow and Jira | Grounded drafts plus separate publication decisions; outbound connectors intentionally not configured |
+
+The detailed standalone version remains available in [Architecture](outputs/opspilot-architecture.md), including the source-code component map.
 
 ## GPT-5.6 usage
 
