@@ -56,7 +56,16 @@ OpsPilot targets data-platform engineers, SRE teams, and incident commanders who
 
 ## Architecture
 
-The Next.js UI calls strict server APIs. A typed orchestration layer coordinates a GPT-5.6 reasoning-provider boundary and an allowlisted read-only tool registry. Zod validates model and API data. Deterministic policy code owns state transitions, citations, action construction, approval integrity, execution, and closure. SQLite persists evidence, reasoning, approvals, outcomes, documents, and audit records.
+OpsPilot uses six explicit tiers:
+
+1. **Experience:** incident workspace, plan, evidence, diagnosis, approval, verification, and documentation UI.
+2. **Application/API:** strict Next.js server routes and Zod request boundaries.
+3. **Agentic reasoning:** GPT-5.6 planning, evidence assessment, adaptive tool selection, and cited synthesis.
+4. **Tool/evidence plane:** typed read-only Databricks, AWS, GitHub, runbook, and history adapters.
+5. **Governance/action:** deterministic proposal construction, SHA-256 approval binding, idempotent sandbox execution, and recovery verification.
+6. **State/security:** SQLite persistence, audit events, redaction, sanitization, security headers, and server-only secrets.
+
+The complete component model, trust boundaries, interaction sequence, deployment topology, and live-versus-simulated map are documented in [Architecture](outputs/opspilot-architecture.md).
 
 ## GPT-5.6 usage
 
