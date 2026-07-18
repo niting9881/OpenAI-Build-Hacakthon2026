@@ -1,0 +1,10 @@
+services:
+  opspilot:
+    build: .
+    ports: ["3000:3000"]
+    environment:
+      OPSPILOT_REASONING_MODE: deterministic
+      OPSPILOT_DB_PATH: /app/work/opspilot-demo.db
+    volumes: ["opspilot-data:/app/work"]
+volumes:
+  opspilot-data:

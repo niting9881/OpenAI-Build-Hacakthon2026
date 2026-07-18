@@ -1,0 +1,14 @@
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+work/node-runtime/
+work/node.zip
+work/node-index.json

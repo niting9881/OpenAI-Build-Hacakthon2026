@@ -1,0 +1,25 @@
+import { chromium } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
+
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3012";
+const output = resolve("outputs/submission-assets");
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1 });
+await page.goto(baseURL);
+await page.screenshot({ path: resolve(output, "01-incident-workspace.png"), fullPage: true });
+await page.getByRole("button", { name: "Start investigation" }).click();
+await page.getByRole("heading", { name: "Root-cause analysis" }).waitFor();
+await page.screenshot({ path: resolve(output, "02-evidence-and-diagnosis.png"), fullPage: true });
+const proposal = page.locator('section[aria-labelledby="action-title"]');
+await proposal.scrollIntoViewIfNeeded();
+await proposal.screenshot({ path: resolve(output, "03-approval-proposal.png") });
+await page.getByRole("button", { name: "Approve sandbox action" }).click();
+await page.getByRole("heading", { name: "Recovery verified" }).waitFor();
+await page.screenshot({ path: resolve(output, "04-verified-recovery.png"), fullPage: true });
+await page.getByRole("button", { name: "Generate resolution drafts" }).click();
+await page.getByRole("heading", { name: "ServiceNow work note" }).waitFor();
+await page.getByRole("heading", { name: "Resolution documentation" }).scrollIntoViewIfNeeded();
+await page.screenshot({ path: resolve(output, "05-grounded-documentation.png"), fullPage: true });
+await browser.close();
