@@ -3,6 +3,7 @@
 ## Ready
 
 - Business requirements: `opspilot-business-requirements.md`
+- Detailed tiered architecture and visual workflows: `opspilot-architecture.md`
 - Architecture and staged implementation plan: `opspilot-implementation-plan.md`
 - Devpost text draft: `devpost-submission-draft.md`
 - Judging-criteria evidence: `judging-criteria-evidence.md`
