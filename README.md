@@ -329,6 +329,23 @@ One-command container option:
 docker compose up --build
 ```
 
+## Deployment
+
+The recommended judge deployment is **Railway** using the included `Dockerfile`,
+`railway.toml`, and a persistent volume mounted at `/app/work`. Configure:
+
+```text
+OPSPILOT_REASONING_MODE=deterministic
+OPSPILOT_DB_PATH=/app/work/opspilot-demo.db
+NODE_ENV=production
+```
+
+Then generate a public Railway domain and verify `/api/health`. AWS is not
+required; AWS App Runner's ephemeral filesystem is not a safe persistence layer
+for the current SQLite design. See the complete [deployment guide](deployment/README.md)
+for Railway steps, a Render fallback, an AWS alternative, security controls, and
+the judge verification procedure.
+
 ## Optional live GPT-5.6 reasoning
 
 Copy `.env.example` to `.env.local`, set `OPSPILOT_REASONING_MODE=live`, add a server-side `OPENAI_API_KEY`, and configure the hackathon-approved GPT-5.6 model identifier. Live mode fails closed if configuration is absent; it does not silently fall back. Never commit `.env.local`.
