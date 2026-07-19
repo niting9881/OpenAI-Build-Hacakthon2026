@@ -332,19 +332,29 @@ docker compose up --build
 ## Deployment
 
 The recommended judge deployment is **Railway** using the included `Dockerfile`,
-`railway.toml`, and a persistent volume mounted at `/app/work`. Configure:
+`railway.toml`, and a persistent volume mounted at `/app/work`. For the primary
+judge experience, configure live GPT-5.6 reasoning:
 
 ```text
-OPSPILOT_REASONING_MODE=deterministic
+OPSPILOT_REASONING_MODE=live
+OPENAI_MODEL=gpt-5.6
+OPENAI_API_KEY=<Railway secret>
 OPSPILOT_DB_PATH=/app/work/opspilot-demo.db
 NODE_ENV=production
 ```
 
+Use a dedicated OpenAI project and restricted deployment key; never reuse a
+personal development key. The UI exposes the provider mode and model, and the
+investigation timeline visibly shows GPT-5.6 planning, `gather_more` adaptation,
+tool selection, and cited synthesis. Keep deterministic mode as a separately
+tested fallback so judges can still complete the workflow if live API access is
+temporarily unavailable.
+
 Then generate a public Railway domain and verify `/api/health`. AWS is not
 required; AWS App Runner's ephemeral filesystem is not a safe persistence layer
 for the current SQLite design. See the complete [deployment guide](deployment/README.md)
-for Railway steps, a Render fallback, an AWS alternative, security controls, and
-the judge verification procedure.
+for the live/fallback strategy, Railway steps, a Render fallback, an AWS
+alternative, security controls, and the judge verification procedure.
 
 ## Optional live GPT-5.6 reasoning
 
